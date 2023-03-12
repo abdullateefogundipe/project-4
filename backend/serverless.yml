@@ -67,21 +67,33 @@ Auth:
   #         cors: true
   #         authorizer: Auth
 
-  # # TODO: Configure this function - 
-  # # Provide iamRoleStatements property. Decide the Actions and AWS Resource. 
-  # # To refer to an AWS resource defined in the "Resources" section, you can use "Resource: !GetAtt <resource-name>.Arn"
-  # # To validate incoming HTTP requests, we have provided the request schemas in function definition below. 
-  # CreateTodo:
-  #   handler: src/lambda/http/createTodo.handler
-  #   events:
-  #     - http:
-  #         method: post
-  #         path: todos
-  #         cors: true
-  #         authorizer: Auth
-  #         request:
-  #           schemas:
-  #             application/json: ${file(models/create-todo-model.json)}
+  # TODO: Configure this function - 
+  # Provide iamRoleStatements property. Decide the Actions and AWS Resource. 
+  # To refer to an AWS resource defined in the "Resources" section, you can use "Resource: !GetAtt <resource-name>.Arn"
+  # To validate incoming HTTP requests, we have provided the request schemas in function definition below. 
+  CreateTodo:
+    handler: src/lambda/http/createTodo.handler
+    events:
+      - http:
+          method: post
+          path: todos
+          cors: true
+          # authorizer: Auth
+          # request:
+          #   schemas:
+          #     application/json: ${file(models/create-todo-model.json)}
+    iamRoleStatementsName: ${self:provider.environment.PROJECT_NAME}-create-todo-role-${self:provider.stage}
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamoDB:PutItem
+        Resources: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
+      - Effect: Allow
+        Action:
+          - xray:PutTraceSegments
+        Resource:
+          - '*'
+
 
   # # TODO: Configure this function
   # # Provide property for setting up CORS, Authorizer, iamRoleStatements, and request schemas
@@ -118,7 +130,29 @@ resources:
     # GatewayResponseDefault4XX:
     #   Type: AWS::ApiGateway::GatewayResponse
     #   Properties:
-    
+    GatewayResponseDefault4XX:
+          Type: AWS::ApiGateway::GatewayResponse
+          Properties:
+            ResponseParameters:
+              gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+              gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date, Authorization, X-Api-Key'"
+              gatewayresponse.header.Access-ControlAllow-Methods: "'GET,OPTIONS,POST,DELETE,PATCH,PUT'"
+            ResponseTye: DEFAULT_4XX
+            RestApiId:
+              Ref: 'ApIGatewayRestApi'
+
+    GatewayResponseDefault5XX:
+      Type: AWS::ApiGateway::GatewayResponse
+      Properties:
+        ResponseParameters:
+          gatewayresponse.header.Access-Control_Allow-Origin: "'*'"
+          gatewayresponse.header.Access-Control_Allow-Headers: "'Content-Type,X-Amz-Date, Authorization, X-Api-Key'"
+          gatewayresponse.header.Access-Control_Allow-Methods: "'GET,OPTIONS,POST,DELETE,PATCH,PUT'"
+        ResponseTye: DEFAULT_5XX
+        RestApiId:
+          Ref: 'ApIGatewayRestApi'
+
+          
     # # TODO: Create a DynamoDB table with local secondary index and a composite key
     # TodosTable:
     #   Type: AWS::DynamoDB::Table
@@ -129,6 +163,33 @@ resources:
     # AttachmentsBucket:
     #   Type: AWS::S3::Bucket
     #   Properties:
+
+    TodosTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: todoId
+            AttributeType: S
+          - AttributeName: createdAt
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: todoId
+            KeyType: RANGE
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.TODOS_TABLE}
+        LocalSecondaryIndexes:
+          - IndexName: ${self:provider.environment.TODOS_CREATED_AT_INDEX}
+            KeySchema:
+              - AttributeName: userId
+                KeyType: HASH
+              - AttributeName: createdAt
+                KeyType: RANGE
+            Projection:
+              ProjectionType: ALL 
 
     # # TODO: Complete the policy below and attach it to the bucket defined above
     # # For cross referencing the name of the bucket, use "!Ref AttachmentsBucket"
